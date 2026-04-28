@@ -109,10 +109,34 @@
     border-radius: 6px; border: 1px solid var(--border);
   }
   .modelcfg-item .mc-main {
-    display: grid; grid-template-columns: 1fr 140px 36px 36px;
-    gap: 8px; align-items: center;
+    display: grid; grid-template-columns: 1fr 140px 28px 36px;
+    gap: 4px; align-items: center;
   }
   .modelcfg-item .mc-main input { padding: 5px 8px; font-size: 13px; }
+  .slug-dropdown-wrap { position: relative; overflow: visible; }
+  .slug-dropdown-wrap input { width: 100%; padding-right: 28px !important; }
+  .slug-dropdown-btn {
+    position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+    background: var(--bg-input); border: none; color: var(--text-muted); cursor: pointer;
+    font-size: 10px; padding: 4px 5px; border-radius: 3px; transition: all .15s; z-index: 2;
+  }
+  .slug-dropdown-btn:hover { color: var(--text); background: var(--bg-hover); }
+  .slug-dropdown {
+    position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 50;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; max-height: 220px; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5); display: none;
+  }
+  .slug-dropdown.open { display: block; }
+  .slug-dropdown .slug-opt {
+    padding: 6px 10px; font-size: 13px; cursor: pointer; color: var(--text);
+    border-bottom: 1px solid var(--border); transition: background .1s;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .slug-dropdown .slug-opt:last-child { border-bottom: none; }
+  .slug-dropdown .slug-opt:hover { background: var(--bg-hover); }
+  .slug-dropdown .slug-opt .slug-name { color: var(--text); font-size: 13px; }
+  .slug-dropdown .slug-opt .slug-prov { color: var(--text-muted); font-size: 11px; }
   .mc-params-toggle {
     background: none; border: none; color: var(--text-muted);
     cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px;
@@ -666,6 +690,17 @@ function collectProviders() {
 }
 
 // ==================== Model Configs (config.agents.defaults.models) ====================
+function getAvailableModelSlugs() {
+  const providers = fullConfig.models?.providers || {};
+  const slugs = [];
+  Object.entries(providers).forEach(([provName, prov]) => {
+    (prov.models || []).forEach(m => {
+      slugs.push({ slug: `${provName}/${m.id}`, provider: provName, name: m.name || m.id });
+    });
+  });
+  return slugs;
+}
+
 function renderModelCfgs() {
   const models = fullConfig.agents?.defaults?.models || {};
   const list = document.getElementById('modelcfg-list');
@@ -690,17 +725,92 @@ function createParamsHTML(params) {
 function createModelCfgRow(slug, cfg) {
   const div = document.createElement('div');
   div.className = 'modelcfg-item';
-  div.innerHTML = `
-    <div class="mc-main">
-      <input type="text" value="${esc(slug)}" placeholder="provider/model-id" data-field="slug">
-      <input type="text" value="${esc(cfg.alias || '')}" placeholder="别名" data-field="alias">
-      <button class="mc-params-toggle" onclick="toggleMcParams(this)" title="展开 params"><span class="arrow">▶</span></button>
-      <button class="remove-btn" onclick="this.closest('.modelcfg-item').remove()" title="删除">✕</button>
-    </div>
-    <div class="mc-params">
-      ${createParamsHTML(cfg.params)}
-    </div>
-  `;
+  const slugs = getAvailableModelSlugs();
+  const dropdownOpts = slugs.map(s => {
+    const opt = document.createElement('div');
+    opt.className = 'slug-opt';
+    opt.dataset.slug = s.slug;
+    opt.innerHTML = `<span class="slug-name">${esc(s.slug)}</span><span class="slug-prov">${esc(s.name)}</span>`;
+    opt.addEventListener('click', () => {
+      div.querySelector('[data-field="slug"]').value = s.slug;
+      div.querySelector('.slug-dropdown').classList.remove('open');
+    });
+    return opt;
+  });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'slug-dropdown-wrap';
+  
+  const slugInput = document.createElement('input');
+  slugInput.type = 'text';
+  slugInput.value = slug;
+  slugInput.placeholder = 'provider/model-id';
+  slugInput.dataset.field = 'slug';
+  
+  const btn = document.createElement('button');
+  btn.className = 'slug-dropdown-btn';
+  btn.title = '选择模型';
+  btn.textContent = '▼';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = wrap.querySelector('.slug-dropdown');
+    const isOpen = dd.classList.toggle('open');
+    if (isOpen) {
+      const close = (ev) => {
+        if (!dd.contains(ev.target) && ev.target !== btn) {
+          dd.classList.remove('open');
+          document.removeEventListener('click', close);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', close), 0);
+    }
+  });
+  
+  const dd = document.createElement('div');
+  dd.className = 'slug-dropdown';
+  dropdownOpts.forEach(opt => dd.appendChild(opt));
+  
+  wrap.appendChild(slugInput);
+  wrap.appendChild(btn);
+  wrap.appendChild(dd);
+
+  const mainDiv = document.createElement('div');
+  mainDiv.className = 'mc-main';
+  mainDiv.appendChild(wrap);
+
+  const aliasInput = document.createElement('input');
+  aliasInput.type = 'text';
+  aliasInput.value = cfg.alias || '';
+  aliasInput.placeholder = '别名';
+  aliasInput.dataset.field = 'alias';
+  mainDiv.appendChild(aliasInput);
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'mc-params-toggle';
+  toggleBtn.title = '展开 params';
+  toggleBtn.innerHTML = '<span class="arrow">▶</span>';
+  toggleBtn.addEventListener('click', () => {
+    const params = div.querySelector('.mc-params');
+    const isOpen = params.classList.toggle('open');
+    toggleBtn.classList.toggle('open', isOpen);
+    toggleBtn.title = isOpen ? '折叠 params' : '展开 params';
+  });
+  mainDiv.appendChild(toggleBtn);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'remove-btn';
+  removeBtn.title = '删除';
+  removeBtn.textContent = '✕';
+  removeBtn.addEventListener('click', () => div.remove());
+  mainDiv.appendChild(removeBtn);
+
+  div.appendChild(mainDiv);
+
+  const paramsDiv = document.createElement('div');
+  paramsDiv.className = 'mc-params';
+  paramsDiv.innerHTML = createParamsHTML(cfg.params);
+  div.appendChild(paramsDiv);
+
   return div;
 }
 
@@ -708,13 +818,6 @@ function addModelCfg() {
   const list = document.getElementById('modelcfg-list');
   list.appendChild(createModelCfgRow('', { alias: '' }));
   document.getElementById('model-count').textContent = list.children.length;
-}
-
-function toggleMcParams(btn) {
-  const params = btn.closest('.modelcfg-item').querySelector('.mc-params');
-  const isOpen = params.classList.toggle('open');
-  btn.classList.toggle('open', isOpen);
-  btn.title = isOpen ? '折叠 params' : '展开 params';
 }
 
 function collectModelCfgs() {
