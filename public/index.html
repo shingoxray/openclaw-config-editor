@@ -161,6 +161,24 @@
     cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 4px; transition: all .15s;
   }
   .remove-btn:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+  /* Defaults panel: sortable check list */
+  .fb-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  .fb-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; cursor: default;
+  }
+  .fb-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+  .fb-item .fb-label { flex: 1; color: var(--text); user-select: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-item .fb-sub { color: var(--text-muted); font-size: 11px; }
+  .fb-item .fb-order-btns { display: flex; gap: 2px; }
+  .fb-item .fb-order-btns button {
+    background: none; border: 1px solid var(--border); color: var(--text-muted);
+    width: 20px; height: 20px; border-radius: 3px; cursor: pointer;
+    font-size: 10px; display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .fb-item .fb-order-btns button:hover { color: var(--text); background: var(--bg-hover); border-color: var(--text-muted); }
   /* Provider cards */
   .provider-card {
     border: 1px solid var(--border); border-radius: var(--radius);
@@ -339,22 +357,22 @@
       <div class="card-title">主模型</div>
       <div class="form-group">
         <label>Primary Model</label>
-        <input type="text" id="default-primary" placeholder="e.g. bifrost/studio-local">
+        <div id="default-primary-wrap"></div>
       </div>
       <div class="form-group">
-        <label>Fallback Models（每行一个）</label>
-        <textarea id="default-fallbacks" rows="3" placeholder="bifrost/modelscope-top"></textarea>
+        <label>Fallback Models（勾选启用，拖动排序）</label>
+        <div id="default-fallbacks-list" class="fb-list"></div>
       </div>
     </div>
     <div class="card">
       <div class="card-title">图片模型</div>
       <div class="form-group">
         <label>Primary Image Model</label>
-        <input type="text" id="image-primary" placeholder="e.g. omlx/gemma-4-26b-a4b-it-8bit">
+        <div id="image-primary-wrap"></div>
       </div>
       <div class="form-group">
-        <label>Fallback Image Models（每行一个）</label>
-        <textarea id="image-fallbacks" rows="3"></textarea>
+        <label>Fallback Image Models（勾选启用，拖动排序）</label>
+        <div id="image-fallbacks-list" class="fb-list"></div>
       </div>
     </div>
     <div class="card">
@@ -861,78 +879,120 @@ function createAgentCard(agent, idx) {
   card.className = 'agent-card';
   card.dataset.agentIdx = idx;
   const modelStr = typeof agent.model === 'string' ? agent.model : (agent.model?.primary || '默认');
-  card.innerHTML = `
-    <div class="agent-header" onclick="this.nextElementSibling.classList.toggle('open')">
-      <div>
-        <span class="agent-id">${esc(agent.id || '未命名')}</span>
-        <span class="agent-meta" style="margin-left:12px">${esc(modelStr)}</span>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();removeAgent(${idx})">删除</button>
-        <span style="color:var(--text-muted);font-size:18px">▾</span>
-      </div>
-    </div>
-    <div class="agent-body">
-      <div class="form-group">
-        <label>Agent ID</label>
-        <input type="text" value="${esc(agent.id || '')}" data-field="id">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Primary Model</label>
-          <input type="text" value="${esc(typeof agent.model === 'string' ? agent.model : (agent.model?.primary || ''))}" data-field="model.primary" placeholder="继承默认">
-        </div>
-        <div class="form-group">
-          <label>Fallback Models（逗号分隔）</label>
-          <input type="text" value="${esc((agent.model?.fallbacks || []).join(', '))}" data-field="model.fallbacks">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Thinking Default</label>
-          <select data-field="thinkingDefault">
-            <option value="">（继承默认）</option>
-            <option value="off" ${agent.thinkingDefault === 'off' ? 'selected' : ''}>off</option>
-            <option value="minimal" ${agent.thinkingDefault === 'minimal' ? 'selected' : ''}>minimal</option>
-            <option value="low" ${agent.thinkingDefault === 'low' ? 'selected' : ''}>low</option>
-            <option value="medium" ${agent.thinkingDefault === 'medium' ? 'selected' : ''}>medium</option>
-            <option value="high" ${agent.thinkingDefault === 'high' ? 'selected' : ''}>high</option>
-            <option value="xhigh" ${agent.thinkingDefault === 'xhigh' ? 'selected' : ''}>xhigh</option>
-            <option value="adaptive" ${agent.thinkingDefault === 'adaptive' ? 'selected' : ''}>adaptive</option>
-            <option value="max" ${agent.thinkingDefault === 'max' ? 'selected' : ''}>max</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Reasoning Default</label>
-          <select data-field="reasoningDefault">
-            <option value="">（继承默认）</option>
-            <option value="on" ${agent.reasoningDefault === 'on' ? 'selected' : ''}>on</option>
-            <option value="off" ${agent.reasoningDefault === 'off' ? 'selected' : ''}>off</option>
-            <option value="stream" ${agent.reasoningDefault === 'stream' ? 'selected' : ''}>stream</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Fast Mode Default</label>
-        <select data-field="fastModeDefault">
-          <option value="">（继承默认）</option>
-          <option value="true" ${agent.fastModeDefault === true ? 'selected' : ''}>true</option>
-          <option value="false" ${agent.fastModeDefault === false ? 'selected' : ''}>false</option>
-        </select>
-      </div>
-      <div class="card-title" style="margin-top:12px;font-size:13px">
-        params
-      </div>
-      <div class="agent-params">
-        ${PARAM_FIELDS.map(f => `
-          <div class="ap-field">
-            <label>${f.label}</label>
-            <input type="${f.type}" ${f.step ? 'step="'+f.step+'"' : ''} value="${agent.params?.[f.key] !== undefined ? agent.params[f.key] : ''}" data-field="param-${f.key}" placeholder="—">
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
+  const primaryVal = typeof agent.model === 'string' ? agent.model : (agent.model?.primary || '');
+  const fallbacks = agent.model?.fallbacks || [];
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'agent-header';
+  header.innerHTML = `<div><span class="agent-id">${esc(agent.id || '未命名')}</span><span class="agent-meta" style="margin-left:12px">${esc(modelStr)}</span></div>`;
+  const headerRight = document.createElement('div');
+  headerRight.style.cssText = 'display:flex;gap:6px;align-items:center';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'btn btn-danger btn-sm';
+  delBtn.textContent = '删除';
+  delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeAgent(idx); });
+  headerRight.appendChild(delBtn);
+  headerRight.insertAdjacentHTML('beforeend', '<span style="color:var(--text-muted);font-size:18px">▾</span>');
+  header.appendChild(headerRight);
+  header.addEventListener('click', () => header.nextElementSibling.classList.toggle('open'));
+  card.appendChild(header);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'agent-body';
+
+  // Agent ID
+  const idGroup = document.createElement('div');
+  idGroup.className = 'form-group';
+  idGroup.innerHTML = '<label>Agent ID</label>';
+  const idInput = document.createElement('input');
+  idInput.type = 'text';
+  idInput.value = agent.id || '';
+  idInput.dataset.field = 'id';
+  idGroup.appendChild(idInput);
+  body.appendChild(idGroup);
+
+  // Model row: Primary + Fallbacks
+  const modelRow = document.createElement('div');
+  modelRow.className = 'form-row';
+
+  // Primary Model dropdown
+  const primaryGroup = document.createElement('div');
+  primaryGroup.className = 'form-group';
+  primaryGroup.innerHTML = '<label>Primary Model</label>';
+  primaryGroup.appendChild(createDropdownSelect(getModelSlugOptions(), primaryVal, '继承默认'));
+  modelRow.appendChild(primaryGroup);
+
+  // Fallback Models checklist
+  const fbGroup = document.createElement('div');
+  fbGroup.className = 'form-group';
+  fbGroup.innerHTML = '<label>Fallback Models（勾选启用，排序）</label>';
+  fbGroup.appendChild(createSortableCheckList(getModelSlugOptions(), fallbacks));
+  modelRow.appendChild(fbGroup);
+
+  body.appendChild(modelRow);
+
+  // Thinking + Reasoning row
+  const trRow = document.createElement('div');
+  trRow.className = 'form-row';
+  const thinkingOpts = ['off','minimal','low','medium','high','xhigh','adaptive','max'];
+  const reasoningOpts = ['on','off','stream'];
+
+  const thinkingGroup = document.createElement('div');
+  thinkingGroup.className = 'form-group';
+  thinkingGroup.innerHTML = '<label>Thinking Default</label>';
+  const thinkingSel = document.createElement('select');
+  thinkingSel.dataset.field = 'thinkingDefault';
+  thinkingSel.innerHTML = '<option value="">（继承默认）</option>' + thinkingOpts.map(v => `<option value="${v}" ${agent.thinkingDefault === v ? 'selected' : ''}>${v}</option>`).join('');
+  thinkingGroup.appendChild(thinkingSel);
+  trRow.appendChild(thinkingGroup);
+
+  const reasoningGroup = document.createElement('div');
+  reasoningGroup.className = 'form-group';
+  reasoningGroup.innerHTML = '<label>Reasoning Default</label>';
+  const reasoningSel = document.createElement('select');
+  reasoningSel.dataset.field = 'reasoningDefault';
+  reasoningSel.innerHTML = '<option value="">（继承默认）</option>' + reasoningOpts.map(v => `<option value="${v}" ${agent.reasoningDefault === v ? 'selected' : ''}>${v}</option>`).join('');
+  reasoningGroup.appendChild(reasoningSel);
+  trRow.appendChild(reasoningGroup);
+  body.appendChild(trRow);
+
+  // Fast Mode
+  const fmGroup = document.createElement('div');
+  fmGroup.className = 'form-group';
+  fmGroup.innerHTML = '<label>Fast Mode Default</label>';
+  const fmSel = document.createElement('select');
+  fmSel.dataset.field = 'fastModeDefault';
+  fmSel.innerHTML = `<option value="">（继承默认）</option><option value="true" ${agent.fastModeDefault === true ? 'selected' : ''}>true</option><option value="false" ${agent.fastModeDefault === false ? 'selected' : ''}>false</option>`;
+  fmGroup.appendChild(fmSel);
+  body.appendChild(fmGroup);
+
+  // Params
+  const paramsTitle = document.createElement('div');
+  paramsTitle.className = 'card-title';
+  paramsTitle.style.fontSize = '13px';
+  paramsTitle.textContent = 'params';
+  body.appendChild(paramsTitle);
+
+  const paramsDiv = document.createElement('div');
+  paramsDiv.className = 'agent-params';
+  PARAM_FIELDS.forEach(f => {
+    const field = document.createElement('div');
+    field.className = 'ap-field';
+    field.innerHTML = `<label>${f.label}</label>`;
+    const input = document.createElement('input');
+    input.type = f.type;
+    if (f.step) input.step = f.step;
+    input.value = agent.params?.[f.key] !== undefined ? agent.params[f.key] : '';
+    input.dataset.field = `param-${f.key}`;
+    input.placeholder = '—';
+    field.appendChild(input);
+    paramsDiv.appendChild(field);
+  });
+  body.appendChild(paramsDiv);
+
+  card.appendChild(body);
   return card;
 }
 
@@ -960,14 +1020,13 @@ function collectAgents() {
     const agent = JSON.parse(JSON.stringify(orig));
     // Override only the fields we edit in the UI
     agent.id = body.querySelector('[data-field="id"]').value.trim();
+    const primary = body.querySelector('.slug-dropdown-wrap input').value.trim();
+    const fallbacks = getCheckedValues(body.querySelector('.fb-list'));
     agent.model = agent.model || {};
-    const primary = body.querySelector('[data-field="model.primary"]').value.trim();
-    const fallbacks = body.querySelector('[data-field="model.fallbacks"]').value.split(',').map(s => s.trim()).filter(Boolean);
     if (primary) agent.model.primary = primary;
     else delete agent.model.primary;
     if (fallbacks.length) agent.model.fallbacks = fallbacks;
     else delete agent.model.fallbacks;
-    // If model object is empty after cleanup, remove it
     if (!agent.model.primary && !agent.model.fallbacks) delete agent.model;
     const thinking = body.querySelector('[data-field="thinkingDefault"]').value;
     if (thinking) agent.thinkingDefault = thinking;
@@ -991,13 +1050,152 @@ function collectAgents() {
   fullConfig.agents.list = agents;
 }
 
+// --- Helpers for Defaults panel ---
+function getModelSlugOptions() {
+  const models = fullConfig.agents?.defaults?.models || {};
+  return Object.entries(models).map(([slug, cfg]) => ({
+    value: slug,
+    label: cfg.alias ? `${slug} (${cfg.alias})` : slug,
+  }));
+}
+
+function getImageModelOptions() {
+  const providers = fullConfig.models?.providers || {};
+  const opts = [];
+  Object.entries(providers).forEach(([provName, prov]) => {
+    (prov.models || []).forEach(m => {
+      if ((m.input || []).includes('image')) {
+        opts.push({
+          value: `${provName}/${m.id}`,
+          label: `${provName}/${m.id} (${m.name || m.id})`,
+        });
+      }
+    });
+  });
+  return opts;
+}
+
+function createDropdownSelect(options, selected, placeholder) {
+  const wrap = document.createElement('div');
+  wrap.className = 'slug-dropdown-wrap';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = selected || '';
+  input.placeholder = placeholder || '';
+  input.dataset.role = 'dropdown-select';
+  input.style.paddingRight = '28px';
+  const btn = document.createElement('button');
+  btn.className = 'slug-dropdown-btn';
+  btn.textContent = '▼';
+  btn.title = '选择';
+  const dd = document.createElement('div');
+  dd.className = 'slug-dropdown';
+  options.forEach(opt => {
+    const item = document.createElement('div');
+    item.className = 'slug-opt';
+    item.innerHTML = `<span class="slug-name">${esc(opt.value)}</span><span class="slug-prov">${esc(opt.label.replace(opt.value, '').replace(/^ \(/, '').replace(/\)$/, ''))}</span>`;
+    item.addEventListener('click', () => {
+      input.value = opt.value;
+      dd.classList.remove('open');
+    });
+    dd.appendChild(item);
+  });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = dd.classList.toggle('open');
+    if (isOpen) {
+      const close = (ev) => {
+        if (!dd.contains(ev.target) && ev.target !== btn) {
+          dd.classList.remove('open');
+          document.removeEventListener('click', close);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', close), 0);
+    }
+  });
+  wrap.appendChild(input);
+  wrap.appendChild(btn);
+  wrap.appendChild(dd);
+  return wrap;
+}
+
+function createSortableCheckList(options, checkedValues) {
+  const list = document.createElement('div');
+  list.className = 'fb-list';
+  // Order: checked items first (in their original order), then unchecked
+  const checkedSet = new Set(checkedValues);
+  const ordered = [...checkedValues];
+  options.forEach(opt => {
+    if (!checkedSet.has(opt.value)) ordered.push(opt.value);
+  });
+  ordered.forEach((val, idx) => {
+    const opt = options.find(o => o.value === val);
+    if (!opt) return;
+    const item = document.createElement('div');
+    item.className = 'fb-item';
+    item.dataset.value = val;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = checkedSet.has(val);
+    const label = document.createElement('span');
+    label.className = 'fb-label';
+    label.textContent = opt.label;
+    label.addEventListener('click', () => { cb.checked = !cb.checked; });
+    const orderBtns = document.createElement('div');
+    orderBtns.className = 'fb-order-btns';
+    const upBtn = document.createElement('button');
+    upBtn.textContent = '▲';
+    upBtn.title = '上移';
+    upBtn.addEventListener('click', () => {
+      const prev = item.previousElementSibling;
+      if (prev) list.insertBefore(item, prev);
+    });
+    const downBtn = document.createElement('button');
+    downBtn.textContent = '▼';
+    downBtn.title = '下移';
+    downBtn.addEventListener('click', () => {
+      const next = item.nextElementSibling;
+      if (next) list.insertBefore(next, item);
+    });
+    orderBtns.appendChild(upBtn);
+    orderBtns.appendChild(downBtn);
+    item.appendChild(cb);
+    item.appendChild(label);
+    item.appendChild(orderBtns);
+    list.appendChild(item);
+  });
+  return list;
+}
+
+function getCheckedValues(listEl) {
+  const vals = [];
+  listEl.querySelectorAll('.fb-item').forEach(item => {
+    const cb = item.querySelector('input[type="checkbox"]');
+    if (cb && cb.checked) vals.push(item.dataset.value);
+  });
+  return vals;
+}
+
 // ==================== Defaults ====================
 function renderDefaults() {
   const d = fullConfig.agents?.defaults || {};
-  document.getElementById('default-primary').value = d.model?.primary || '';
-  document.getElementById('default-fallbacks').value = (d.model?.fallbacks || []).join('\n');
-  document.getElementById('image-primary').value = d.imageModel?.primary || '';
-  document.getElementById('image-fallbacks').value = (d.imageModel?.fallbacks || []).join('\n');
+  // Primary Model dropdown
+  const primaryWrap = document.getElementById('default-primary-wrap');
+  primaryWrap.innerHTML = '';
+  primaryWrap.appendChild(createDropdownSelect(getModelSlugOptions(), d.model?.primary || '', 'e.g. bifrost/studio-local'));
+  // Fallback Models sortable checklist
+  const fbList = document.getElementById('default-fallbacks-list');
+  fbList.innerHTML = '';
+  fbList.appendChild(createSortableCheckList(getModelSlugOptions(), d.model?.fallbacks || []));
+  // Primary Image Model dropdown
+  const imgPrimaryWrap = document.getElementById('image-primary-wrap');
+  imgPrimaryWrap.innerHTML = '';
+  imgPrimaryWrap.appendChild(createDropdownSelect(getImageModelOptions(), d.imageModel?.primary || '', 'e.g. omlx/gemma-4-26b-a4b-it-8bit'));
+  // Fallback Image Models sortable checklist
+  const imgFbList = document.getElementById('image-fallbacks-list');
+  imgFbList.innerHTML = '';
+  imgFbList.appendChild(createSortableCheckList(getImageModelOptions(), d.imageModel?.fallbacks || []));
+  // General settings
   document.getElementById('default-thinking').value = d.thinkingDefault || 'low';
   document.getElementById('default-timeout').value = d.timeoutSeconds || 3600;
   document.getElementById('default-llm-idle').value = d.llm?.idleTimeoutSeconds || 0;
@@ -1005,16 +1203,15 @@ function renderDefaults() {
 
 function collectDefaults() {
   const d = fullConfig.agents.defaults;
-  d.model.primary = document.getElementById('default-primary').value.trim();
-  d.model.fallbacks = document.getElementById('default-fallbacks').value.split('\n').map(s => s.trim()).filter(Boolean);
+  d.model.primary = document.querySelector('#default-primary-wrap input').value.trim();
+  d.model.fallbacks = getCheckedValues(document.getElementById('default-fallbacks-list'));
   d.imageModel = d.imageModel || {};
-  d.imageModel.primary = document.getElementById('image-primary').value.trim();
-  d.imageModel.fallbacks = document.getElementById('image-fallbacks').value.split('\n').map(s => s.trim()).filter(Boolean);
+  d.imageModel.primary = document.querySelector('#image-primary-wrap input').value.trim();
+  d.imageModel.fallbacks = getCheckedValues(document.getElementById('image-fallbacks-list'));
   d.thinkingDefault = document.getElementById('default-thinking').value;
   d.timeoutSeconds = parseInt(document.getElementById('default-timeout').value) || 3600;
   d.llm = d.llm || {};
   d.llm.idleTimeoutSeconds = parseInt(document.getElementById('default-llm-idle').value) || 0;
-  // remove reasoningDefault and fastModeDefault from defaults if they exist
   delete d.reasoningDefault;
   delete d.fastModeDefault;
 }
