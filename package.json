@@ -1,0 +1,13 @@
+{
+  "name": "openclaw-config-editor",
+  "version": "1.0.0",
+  "description": "OpenClaw 模型配置 GUI 编辑器",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

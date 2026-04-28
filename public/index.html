@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw 配置编辑器</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg-card: #1a1d27;
+    --bg-input: #252830;
+    --bg-hover: #2a2d38;
+    --border: #2e3140;
+    --border-focus: #6c72cb;
+    --text: #e1e4ed;
+    --text-dim: #8b8fa3;
+    --text-muted: #5c6078;
+    --accent: #6c72cb;
+    --accent-light: #8b92e0;
+    --success: #4ade80;
+    --danger: #f87171;
+    --warning: #fbbf24;
+    --radius: 8px;
+    --shadow: 0 2px 12px rgba(0,0,0,.3);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .header {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .header h1 span { font-size: 22px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .tabs {
+    display: flex; gap: 0; background: var(--bg-card);
+    border-bottom: 1px solid var(--border); padding: 0 32px; overflow-x: auto;
+  }
+  .tab {
+    padding: 12px 20px; cursor: pointer; color: var(--text-dim);
+    border-bottom: 2px solid transparent; font-size: 14px;
+    white-space: nowrap; transition: all .2s; user-select: none;
+  }
+  .tab:hover { color: var(--text); background: var(--bg-hover); }
+  .tab.active { color: var(--accent-light); border-bottom-color: var(--accent); }
+  .main { max-width: 960px; margin: 0 auto; padding: 24px 32px 80px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 20px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 15px; font-weight: 600; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title .badge {
+    font-size: 11px; background: var(--accent); color: #fff;
+    padding: 2px 8px; border-radius: 10px; font-weight: 500;
+  }
+  label {
+    display: block; font-size: 13px; color: var(--text-dim);
+    margin-bottom: 6px; font-weight: 500;
+  }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%; padding: 8px 12px; background: var(--bg-input);
+    border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 14px; outline: none;
+    transition: border-color .2s; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
+  textarea { resize: vertical; min-height: 80px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 14px; }
+  .form-group { margin-bottom: 14px; }
+  .btn {
+    padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 500; transition: all .15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-light); }
+  .btn-success { background: #22c55e; color: #fff; }
+  .btn-success:hover { background: #4ade80; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-danger:hover { background: #f87171; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-warning { background: #d97706; color: #fff; }
+  .btn-warning:hover { background: #fbbf24; }
+  /* Model config list */
+  .modelcfg-list { display: flex; flex-direction: column; gap: 10px; }
+  .modelcfg-item {
+    padding: 12px 14px; background: var(--bg-input);
+    border-radius: 6px; border: 1px solid var(--border);
+  }
+  .modelcfg-item .mc-main {
+    display: grid; grid-template-columns: 1fr 140px 36px 36px;
+    gap: 8px; align-items: center;
+  }
+  .modelcfg-item .mc-main input { padding: 5px 8px; font-size: 13px; }
+  .mc-params-toggle {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px;
+    transition: all .15s; display: flex; align-items: center; justify-content: center;
+  }
+  .mc-params-toggle:hover { color: var(--text); background: var(--bg-hover); }
+  .mc-params-toggle .arrow { display: inline-block; transition: transform .2s; font-size: 10px; }
+  .mc-params-toggle.open .arrow { transform: rotate(90deg); }
+  .modelcfg-item .mc-params {
+    display: none; grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+  .modelcfg-item .mc-params.open { display: grid; }
+  .modelcfg-item .mc-params .mp-field { display: flex; flex-direction: column; gap: 2px; }
+  .modelcfg-item .mc-params .mp-field label {
+    font-size: 11px; margin-bottom: 0; color: var(--text-muted); font-weight: 400;
+  }
+  .modelcfg-item .mc-params .mp-field input { padding: 4px 6px; font-size: 12px; }
+  .remove-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 4px; transition: all .15s;
+  }
+  .remove-btn:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+  /* Provider cards */
+  .provider-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .provider-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--bg-input);
+    cursor: pointer; user-select: none;
+  }
+  .provider-header:hover { background: var(--bg-hover); }
+  .provider-header .provider-name { font-weight: 600; font-size: 14px; }
+  .provider-header .provider-meta { font-size: 12px; color: var(--text-dim); }
+  .provider-body { padding: 16px; border-top: 1px solid var(--border); display: none; }
+  .provider-body.open { display: block; }
+  .provider-models { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .provider-model-row {
+    padding: 10px 12px; background: var(--bg);
+    border-radius: 6px; border: 1px solid var(--border); font-size: 13px;
+  }
+  .provider-model-row .pm-row {
+    display: grid; grid-template-columns: 140px 1fr 130px;
+    gap: 8px; align-items: center; margin-bottom: 8px;
+  }
+  .provider-model-row .pm-row:last-child { margin-bottom: 0; }
+  .provider-model-row .pm-row label {
+    font-size: 11px; margin-bottom: 0; color: var(--text-muted);
+    white-space: nowrap; display: flex; align-items: center; gap: 4px;
+  }
+  .provider-model-row .pm-row label .field-name { min-width: 80px; text-align: right; }
+  .provider-model-row input, .provider-model-row select { padding: 4px 8px; font-size: 12px; }
+  .pm-check-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pm-check-group label {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; color: var(--text-dim); cursor: pointer; margin-bottom: 0;
+  }
+  .pm-check-group input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); }
+  /* Agent cards */
+  .agent-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .agent-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--bg-input);
+    cursor: pointer; user-select: none;
+  }
+  .agent-header:hover { background: var(--bg-hover); }
+  .agent-header .agent-id { font-weight: 600; font-size: 14px; }
+  .agent-header .agent-meta { font-size: 12px; color: var(--text-dim); }
+  .agent-body { padding: 16px; border-top: 1px solid var(--border); display: none; }
+  .agent-body.open { display: block; }
+  .agent-params { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .agent-params .ap-field { display: flex; flex-direction: column; gap: 2px; }
+  .agent-params .ap-field label { font-size: 11px; margin-bottom: 0; color: var(--text-muted); font-weight: 400; }
+  .agent-params .ap-field input { padding: 4px 6px; font-size: 12px; }
+  /* JSON Editor */
+  .json-editor {
+    width: 100%; min-height: 500px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px; line-height: 1.6; tab-size: 2;
+  }
+  /* Toast */
+  .toast-container { position: fixed; top: 80px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    box-shadow: 0 4px 20px rgba(0,0,0,.4); animation: slideIn .25s ease;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toast-success { background: #166534; color: #4ade80; }
+  .toast-error { background: #7f1d1d; color: #f87171; }
+  .toast-info { background: #1e3a5f; color: #93c5fd; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+  .status { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.ok { background: var(--success); }
+  .status-dot.err { background: var(--danger); }
+  .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+  .loading-screen {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 60vh; color: var(--text-dim);
+  }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .desc { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+  @media (max-width: 640px) {
+    .header, .tabs, .main { padding-left: 16px; padding-right: 16px; }
+    .form-row { grid-template-columns: 1fr; }
+    .modelcfg-item .mc-main { grid-template-columns: 1fr; }
+    .modelcfg-item .mc-params { grid-template-columns: 1fr 1fr; }
+    .provider-model-row .pm-row { grid-template-columns: 1fr; }
+    .agent-params { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>🦀</span> OpenClaw 配置编辑器</h1>
+  <div class="header-actions">
+    <div class="status" id="status">
+      <div class="status-dot loading"></div>
+      <span>加载中...</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="reloadConfig()">刷新</button>
+    <button class="btn btn-warning btn-sm" onclick="backupConfig()">备份</button>
+    <button class="btn btn-success" onclick="saveCurrentPanel()">保存</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-panel="providers" onclick="switchTab(this)">模型 Provider</div>
+  <div class="tab" data-panel="models" onclick="switchTab(this)">模型配置</div>
+  <div class="tab" data-panel="agents" onclick="switchTab(this)">代理配置</div>
+  <div class="tab" data-panel="defaults" onclick="switchTab(this)">默认设置</div>
+  <div class="tab" data-panel="raw" onclick="switchTab(this)">原始 JSON</div>
+</div>
+
+<div class="main">
+  <div id="loading" class="loading-screen">
+    <div class="spinner"></div>
+    <div>正在加载配置...</div>
+  </div>
+
+  <!-- Providers Panel: config.models -->
+  <div class="panel" id="panel-providers">
+    <div class="desc">编辑 <code>config.models</code> — 模型 Provider 定义（API 接入、模型参数）</div>
+    <div class="form-group">
+      <label>合并模式（config.models.mode）</label>
+      <select id="providers-mode">
+        <option value="merge">merge（合并）</option>
+        <option value="replace">replace（替换）</option>
+      </select>
+    </div>
+    <div id="provider-list"></div>
+    <div style="margin-top: 12px; display: flex; gap: 8px;">
+      <button class="btn btn-ghost btn-sm" onclick="addProvider()">+ 添加 Provider</button>
+    </div>
+  </div>
+
+  <!-- Models Panel: config.agents.defaults.models -->
+  <div class="panel" id="panel-models">
+    <div class="desc">编辑 <code>config.agents.defaults.models</code> — 模型 slug → 别名/params 映射</div>
+    <div class="card">
+      <div class="card-title">
+        模型配置
+        <span class="badge" id="model-count">0</span>
+      </div>
+      <div class="modelcfg-list" id="modelcfg-list"></div>
+      <div style="margin-top: 12px;">
+        <button class="btn btn-ghost btn-sm" onclick="addModelCfg()">+ 添加模型</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agents Panel -->
+  <div class="panel" id="panel-agents">
+    <div class="desc">编辑 <code>config.agents.list</code> — 代理实例配置</div>
+    <div class="card">
+      <div class="card-title">
+        代理列表
+        <span class="badge" id="agent-count">0</span>
+      </div>
+      <div id="agent-list"></div>
+      <div style="margin-top: 12px;">
+        <button class="btn btn-ghost btn-sm" onclick="addAgent()">+ 添加代理</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Defaults Panel -->
+  <div class="panel" id="panel-defaults">
+    <div class="desc">编辑 <code>config.agents.defaults</code> — 代理默认配置</div>
+    <div class="card">
+      <div class="card-title">主模型</div>
+      <div class="form-group">
+        <label>Primary Model</label>
+        <input type="text" id="default-primary" placeholder="e.g. bifrost/studio-local">
+      </div>
+      <div class="form-group">
+        <label>Fallback Models（每行一个）</label>
+        <textarea id="default-fallbacks" rows="3" placeholder="bifrost/modelscope-top"></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">图片模型</div>
+      <div class="form-group">
+        <label>Primary Image Model</label>
+        <input type="text" id="image-primary" placeholder="e.g. omlx/gemma-4-26b-a4b-it-8bit">
+      </div>
+      <div class="form-group">
+        <label>Fallback Image Models（每行一个）</label>
+        <textarea id="image-fallbacks" rows="3"></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">通用设置</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Thinking Default</label>
+          <select id="default-thinking">
+            <option value="off">off</option>
+            <option value="minimal">minimal</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+            <option value="adaptive">adaptive</option>
+            <option value="max">max</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Timeout（秒）</label>
+          <input type="number" id="default-timeout" placeholder="3600">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>LLM Idle Timeout（秒, 0=不限）</label>
+          <input type="number" id="default-llm-idle" placeholder="0">
+        </div>
+        <div class="form-group"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw JSON Panel -->
+  <div class="panel" id="panel-raw">
+    <div class="card">
+      <div class="card-title">
+        原始 JSON 编辑器
+        <button class="btn btn-ghost btn-sm" onclick="formatJson()">格式化</button>
+      </div>
+      <textarea class="json-editor" id="raw-json" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+let fullConfig = null;
+let currentPanel = 'providers';
+
+const PARAM_FIELDS = [
+  { key: 'temperature', label: 'temperature', type: 'number', step: '0.1' },
+  { key: 'top_p', label: 'top_p', type: 'number', step: '0.01' },
+  { key: 'top_k', label: 'top_k', type: 'number', step: '1' },
+  { key: 'min_p', label: 'min_p', type: 'number', step: '0.01' },
+  { key: 'repetition_penalty', label: 'repetition_penalty', type: 'number', step: '0.1' },
+  { key: 'presence_penalty', label: 'presence_penalty', type: 'number', step: '0.1' },
+];
+
+// --- Toast ---
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// --- Status ---
+function setStatus(state, text) {
+  const s = document.getElementById('status');
+  s.innerHTML = `<div class="status-dot ${state}"></div><span>${text}</span>`;
+}
+
+// --- Tab ---
+function switchTab(el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  const panel = el.dataset.panel;
+  document.getElementById(`panel-${panel}`).classList.add('active');
+  currentPanel = panel;
+  if (panel === 'raw' && fullConfig) {
+    document.getElementById('raw-json').value = JSON.stringify(fullConfig, null, 2);
+  }
+}
+
+// --- Load ---
+async function loadConfig() {
+  try {
+    setStatus('loading', '加载中...');
+    document.getElementById('loading').style.display = 'flex';
+    const res = await fetch('/api/config');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    fullConfig = json.data;
+    renderProviders();
+    renderModelCfgs();
+    renderAgents();
+    renderDefaults();
+    document.getElementById('loading').style.display = 'none';
+    setStatus('ok', '已加载');
+    toast('配置加载成功', 'success');
+  } catch (e) {
+    setStatus('err', '加载失败');
+    toast('加载失败: ' + e.message, 'error');
+    document.getElementById('loading').innerHTML = `<div style="color:var(--danger)">加载失败: ${e.message}</div><button class="btn btn-ghost" style="margin-top:12px" onclick="reloadConfig()">重试</button>`;
+  }
+}
+
+function reloadConfig() {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('loading').innerHTML = '<div class="spinner"></div><div>正在加载配置...</div>';
+  loadConfig();
+}
+
+// --- Backup ---
+async function backupConfig() {
+  try {
+    setStatus('loading', '备份中...');
+    const res = await fetch('/api/backup', { method: 'POST' });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    setStatus('ok', '已备份');
+    toast('备份成功: ' + json.path, 'success');
+  } catch (e) {
+    setStatus('err', '备份失败');
+    toast('备份失败: ' + e.message, 'error');
+  }
+}
+
+// ==================== Providers (config.models) ====================
+function renderProviders() {
+  const models = fullConfig.models || { mode: 'merge', providers: {} };
+  document.getElementById('providers-mode').value = models.mode || 'merge';
+  const container = document.getElementById('provider-list');
+  container.innerHTML = '';
+  const providers = models.providers || {};
+  Object.entries(providers).forEach(([name, prov]) => {
+    container.appendChild(createProviderCard(name, prov));
+  });
+}
+
+function apiOptions(selected) {
+  return `<option value="openai-completions" ${selected === 'openai-completions' ? 'selected' : ''}>openai-completions</option>
+          <option value="openai-responses" ${selected === 'openai-responses' ? 'selected' : ''}>openai-responses</option>`;
+}
+
+function createProviderCard(name, prov) {
+  const card = document.createElement('div');
+  card.className = 'provider-card';
+  const modelCount = prov.models?.length || 0;
+  card.innerHTML = `
+    <div class="provider-header" onclick="this.nextElementSibling.classList.toggle('open')">
+      <div>
+        <span class="provider-name">${esc(name)}</span>
+        <span class="provider-meta" style="margin-left:12px">${modelCount} models · ${esc(prov.api || 'openai-completions')}</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();this.closest('.provider-card').remove()">删除</button>
+        <span style="color:var(--text-muted);font-size:18px">▾</span>
+      </div>
+    </div>
+    <div class="provider-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Provider 名称</label>
+          <input type="text" value="${esc(name)}" data-field="provider-name">
+        </div>
+        <div class="form-group">
+          <label>API 类型</label>
+          <select data-field="api">${apiOptions(prov.api)}</select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Base URL</label>
+          <input type="text" value="${esc(prov.baseUrl || '')}" data-field="baseUrl" placeholder="https://api.example.com/v1">
+        </div>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="text" value="${esc(prov.apiKey || '')}" data-field="apiKey" placeholder="sk-...">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Auth 方式</label>
+        <select data-field="auth">
+          <option value="api-key" ${prov.auth === 'api-key' ? 'selected' : ''}>api-key</option>
+          <option value="none" ${prov.auth === 'none' ? 'selected' : ''}>none</option>
+          <option value="bearer" ${prov.auth === 'bearer' ? 'selected' : ''}>bearer</option>
+        </select>
+      </div>
+      <div class="card-title" style="margin-top:16px">
+        模型定义
+        <span class="badge">${modelCount}</span>
+      </div>
+      <div class="provider-models" data-role="provider-models">
+        ${(prov.models || []).map(m => createProviderModelRowHTML(m)).join('')}
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addProviderModel(this)">+ 添加模型</button>
+    </div>
+  `;
+  return card;
+}
+
+function createProviderModelRowHTML(m) {
+  const hasText = (m.input || []).includes('text');
+  const hasImage = (m.input || []).includes('image');
+  return `
+    <div class="provider-model-row" data-orig-compat="${esc(JSON.stringify(m.compat || {}))}" data-orig-cost="${esc(JSON.stringify(m.cost || {input:0,output:0,cacheRead:0,cacheWrite:0}))}">
+      <div class="pm-row">
+        <label><span class="field-name">id</span></label>
+        <input type="text" value="${esc(m.id || '')}" data-field="id" placeholder="model-id">
+        <button class="btn btn-danger btn-sm" onclick="this.closest('.provider-model-row').remove()" style="width:fit-content">删除</button>
+      </div>
+      <div class="pm-row">
+        <label><span class="field-name">name</span></label>
+        <input type="text" value="${esc(m.name || '')}" data-field="name" placeholder="模型显示名称">
+        <span></span>
+      </div>
+      <div class="pm-row">
+        <label><span class="field-name">api</span></label>
+        <select data-field="api">${apiOptions(m.api)}</select>
+        <span></span>
+      </div>
+      <div class="pm-row">
+        <label><span class="field-name">contextWindow</span></label>
+        <input type="number" value="${m.contextWindow || 262144}" data-field="contextWindow" min="1">
+        <span></span>
+      </div>
+      <div class="pm-row">
+        <label><span class="field-name">maxTokens</span></label>
+        <input type="number" value="${m.maxTokens || 8192}" data-field="maxTokens" min="1">
+        <span></span>
+      </div>
+      <div class="pm-row" style="grid-template-columns: 140px auto">
+        <label><span class="field-name">flags</span></label>
+        <div class="pm-check-group">
+          <label><input type="checkbox" ${m.reasoning ? 'checked' : ''} data-field="reasoning"> reasoning</label>
+          <label><input type="checkbox" ${hasText ? 'checked' : ''} data-field="input-text"> text</label>
+          <label><input type="checkbox" ${hasImage ? 'checked' : ''} data-field="input-image"> image</label>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function addProvider() {
+  const container = document.getElementById('provider-list');
+  container.appendChild(createProviderCard('new-provider', { api: 'openai-completions', auth: 'api-key', models: [] }));
+}
+
+function addProviderModel(btn) {
+  const modelsDiv = btn.previousElementSibling;
+  const row = document.createElement('div');
+  row.className = 'provider-model-row';
+  row.innerHTML = `
+    <div class="pm-row">
+      <label><span class="field-name">id</span></label>
+      <input type="text" value="" data-field="id" placeholder="model-id">
+      <button class="btn btn-danger btn-sm" onclick="this.closest('.provider-model-row').remove()" style="width:fit-content">删除</button>
+    </div>
+    <div class="pm-row">
+      <label><span class="field-name">name</span></label>
+      <input type="text" value="" data-field="name" placeholder="模型显示名称">
+      <span></span>
+    </div>
+    <div class="pm-row">
+      <label><span class="field-name">api</span></label>
+      <select data-field="api">${apiOptions('openai-completions')}</select>
+      <span></span>
+    </div>
+    <div class="pm-row">
+      <label><span class="field-name">contextWindow</span></label>
+      <input type="number" value="262144" data-field="contextWindow" min="1">
+      <span></span>
+    </div>
+    <div class="pm-row">
+      <label><span class="field-name">maxTokens</span></label>
+      <input type="number" value="8192" data-field="maxTokens" min="1">
+      <span></span>
+    </div>
+    <div class="pm-row" style="grid-template-columns: 140px auto">
+      <label><span class="field-name">flags</span></label>
+      <div class="pm-check-group">
+        <label><input type="checkbox" data-field="reasoning"> reasoning</label>
+        <label><input type="checkbox" checked data-field="input-text"> text</label>
+        <label><input type="checkbox" data-field="input-image"> image</label>
+      </div>
+    </div>
+  `;
+  modelsDiv.appendChild(row);
+}
+
+function collectProviders() {
+  const mode = document.getElementById('providers-mode').value;
+  const providers = {};
+  document.querySelectorAll('#provider-list .provider-card').forEach(card => {
+    const body = card.querySelector('.provider-body');
+    const name = body.querySelector('[data-field="provider-name"]').value.trim();
+    if (!name) return;
+    const models = [];
+    body.querySelectorAll('.provider-model-row').forEach(row => {
+      const id = row.querySelector('[data-field="id"]').value.trim();
+      if (!id) return;
+      const input = [];
+      if (row.querySelector('[data-field="input-text"]').checked) input.push('text');
+      if (row.querySelector('[data-field="input-image"]').checked) input.push('image');
+      const m = {
+        id,
+        name: row.querySelector('[data-field="name"]').value.trim() || id,
+        api: row.querySelector('[data-field="api"]').value,
+        reasoning: row.querySelector('[data-field="reasoning"]').checked,
+        input: input.length ? input : ['text'],
+        contextWindow: parseInt(row.querySelector('[data-field="contextWindow"]').value) || 262144,
+        maxTokens: parseInt(row.querySelector('[data-field="maxTokens"]').value) || 8192,
+      };
+      try { const compat = JSON.parse(row.dataset.origCompat || '{}'); if (Object.keys(compat).length) m.compat = compat; } catch(e) {}
+      try { const cost = JSON.parse(row.dataset.origCost || '{}'); m.cost = Object.keys(cost).length ? cost : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }; } catch(e) { m.cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }; }
+      models.push(m);
+    });
+    providers[name] = {
+      api: body.querySelector('[data-field="api"]').value,
+      apiKey: body.querySelector('[data-field="apiKey"]').value.trim(),
+      auth: body.querySelector('[data-field="auth"]').value,
+      baseUrl: body.querySelector('[data-field="baseUrl"]').value.trim(),
+      models,
+    };
+  });
+  fullConfig.models = { mode, providers };
+}
+
+// ==================== Model Configs (config.agents.defaults.models) ====================
+function renderModelCfgs() {
+  const models = fullConfig.agents?.defaults?.models || {};
+  const list = document.getElementById('modelcfg-list');
+  list.innerHTML = '';
+  const entries = Object.entries(models);
+  document.getElementById('model-count').textContent = entries.length;
+  entries.forEach(([slug, cfg]) => {
+    list.appendChild(createModelCfgRow(slug, cfg));
+  });
+}
+
+function createParamsHTML(params) {
+  const p = params || {};
+  return PARAM_FIELDS.map(f => `
+    <div class="mp-field">
+      <label>${f.label}</label>
+      <input type="${f.type}" ${f.step ? 'step="'+f.step+'"' : ''} value="${p[f.key] !== undefined ? p[f.key] : ''}" data-field="param-${f.key}" placeholder="—">
+    </div>
+  `).join('');
+}
+
+function createModelCfgRow(slug, cfg) {
+  const div = document.createElement('div');
+  div.className = 'modelcfg-item';
+  div.innerHTML = `
+    <div class="mc-main">
+      <input type="text" value="${esc(slug)}" placeholder="provider/model-id" data-field="slug">
+      <input type="text" value="${esc(cfg.alias || '')}" placeholder="别名" data-field="alias">
+      <button class="mc-params-toggle" onclick="toggleMcParams(this)" title="展开 params"><span class="arrow">▶</span></button>
+      <button class="remove-btn" onclick="this.closest('.modelcfg-item').remove()" title="删除">✕</button>
+    </div>
+    <div class="mc-params">
+      ${createParamsHTML(cfg.params)}
+    </div>
+  `;
+  return div;
+}
+
+function addModelCfg() {
+  const list = document.getElementById('modelcfg-list');
+  list.appendChild(createModelCfgRow('', { alias: '' }));
+  document.getElementById('model-count').textContent = list.children.length;
+}
+
+function toggleMcParams(btn) {
+  const params = btn.closest('.modelcfg-item').querySelector('.mc-params');
+  const isOpen = params.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+  btn.title = isOpen ? '折叠 params' : '展开 params';
+}
+
+function collectModelCfgs() {
+  const rows = document.querySelectorAll('#modelcfg-list .modelcfg-item');
+  const origModels = fullConfig.agents?.defaults?.models || {};
+  const models = {};
+  rows.forEach(row => {
+    const slug = row.querySelector('[data-field="slug"]').value.trim();
+    if (!slug) return;
+    // Start from a copy of the original entry to preserve fields like streaming
+    const orig = origModels[slug] || {};
+    const entry = JSON.parse(JSON.stringify(orig));
+    entry.alias = row.querySelector('[data-field="alias"]').value.trim();
+    const params = {};
+    PARAM_FIELDS.forEach(f => {
+      const val = row.querySelector(`[data-field="param-${f.key}"]`).value.trim();
+      if (val !== '') params[f.key] = parseFloat(val);
+    });
+    if (Object.keys(params).length) entry.params = params;
+    else delete entry.params;
+    models[slug] = entry;
+  });
+  if (!fullConfig.agents) fullConfig.agents = {};
+  if (!fullConfig.agents.defaults) fullConfig.agents.defaults = {};
+  fullConfig.agents.defaults.models = models;
+}
+
+// ==================== Agents (config.agents.list) ====================
+function renderAgents() {
+  const agents = fullConfig.agents?.list || [];
+  const container = document.getElementById('agent-list');
+  container.innerHTML = '';
+  document.getElementById('agent-count').textContent = agents.length;
+  agents.forEach((agent, i) => {
+    container.appendChild(createAgentCard(agent, i));
+  });
+}
+
+function createAgentCard(agent, idx) {
+  const card = document.createElement('div');
+  card.className = 'agent-card';
+  card.dataset.agentIdx = idx;
+  const modelStr = typeof agent.model === 'string' ? agent.model : (agent.model?.primary || '默认');
+  card.innerHTML = `
+    <div class="agent-header" onclick="this.nextElementSibling.classList.toggle('open')">
+      <div>
+        <span class="agent-id">${esc(agent.id || '未命名')}</span>
+        <span class="agent-meta" style="margin-left:12px">${esc(modelStr)}</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();removeAgent(${idx})">删除</button>
+        <span style="color:var(--text-muted);font-size:18px">▾</span>
+      </div>
+    </div>
+    <div class="agent-body">
+      <div class="form-group">
+        <label>Agent ID</label>
+        <input type="text" value="${esc(agent.id || '')}" data-field="id">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Primary Model</label>
+          <input type="text" value="${esc(typeof agent.model === 'string' ? agent.model : (agent.model?.primary || ''))}" data-field="model.primary" placeholder="继承默认">
+        </div>
+        <div class="form-group">
+          <label>Fallback Models（逗号分隔）</label>
+          <input type="text" value="${esc((agent.model?.fallbacks || []).join(', '))}" data-field="model.fallbacks">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Thinking Default</label>
+          <select data-field="thinkingDefault">
+            <option value="">（继承默认）</option>
+            <option value="off" ${agent.thinkingDefault === 'off' ? 'selected' : ''}>off</option>
+            <option value="minimal" ${agent.thinkingDefault === 'minimal' ? 'selected' : ''}>minimal</option>
+            <option value="low" ${agent.thinkingDefault === 'low' ? 'selected' : ''}>low</option>
+            <option value="medium" ${agent.thinkingDefault === 'medium' ? 'selected' : ''}>medium</option>
+            <option value="high" ${agent.thinkingDefault === 'high' ? 'selected' : ''}>high</option>
+            <option value="xhigh" ${agent.thinkingDefault === 'xhigh' ? 'selected' : ''}>xhigh</option>
+            <option value="adaptive" ${agent.thinkingDefault === 'adaptive' ? 'selected' : ''}>adaptive</option>
+            <option value="max" ${agent.thinkingDefault === 'max' ? 'selected' : ''}>max</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Reasoning Default</label>
+          <select data-field="reasoningDefault">
+            <option value="">（继承默认）</option>
+            <option value="on" ${agent.reasoningDefault === 'on' ? 'selected' : ''}>on</option>
+            <option value="off" ${agent.reasoningDefault === 'off' ? 'selected' : ''}>off</option>
+            <option value="stream" ${agent.reasoningDefault === 'stream' ? 'selected' : ''}>stream</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Fast Mode Default</label>
+        <select data-field="fastModeDefault">
+          <option value="">（继承默认）</option>
+          <option value="true" ${agent.fastModeDefault === true ? 'selected' : ''}>true</option>
+          <option value="false" ${agent.fastModeDefault === false ? 'selected' : ''}>false</option>
+        </select>
+      </div>
+      <div class="card-title" style="margin-top:12px;font-size:13px">
+        params
+      </div>
+      <div class="agent-params">
+        ${PARAM_FIELDS.map(f => `
+          <div class="ap-field">
+            <label>${f.label}</label>
+            <input type="${f.type}" ${f.step ? 'step="'+f.step+'"' : ''} value="${agent.params?.[f.key] !== undefined ? agent.params[f.key] : ''}" data-field="param-${f.key}" placeholder="—">
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function addAgent() {
+  const agents = fullConfig.agents?.list || [];
+  agents.push({ id: 'new-agent', model: {} });
+  fullConfig.agents.list = agents;
+  renderAgents();
+}
+
+function removeAgent(idx) {
+  fullConfig.agents.list.splice(idx, 1);
+  renderAgents();
+}
+
+function collectAgents() {
+  const cards = document.querySelectorAll('#agent-list .agent-card');
+  const origAgents = fullConfig.agents?.list || [];
+  const agents = [];
+  cards.forEach((card, i) => {
+    const idx = parseInt(card.dataset.agentIdx);
+    const orig = origAgents[idx] || {};
+    const body = card.querySelector('.agent-body');
+    // Start from a copy of the original agent to preserve all fields
+    const agent = JSON.parse(JSON.stringify(orig));
+    // Override only the fields we edit in the UI
+    agent.id = body.querySelector('[data-field="id"]').value.trim();
+    agent.model = agent.model || {};
+    const primary = body.querySelector('[data-field="model.primary"]').value.trim();
+    const fallbacks = body.querySelector('[data-field="model.fallbacks"]').value.split(',').map(s => s.trim()).filter(Boolean);
+    if (primary) agent.model.primary = primary;
+    else delete agent.model.primary;
+    if (fallbacks.length) agent.model.fallbacks = fallbacks;
+    else delete agent.model.fallbacks;
+    // If model object is empty after cleanup, remove it
+    if (!agent.model.primary && !agent.model.fallbacks) delete agent.model;
+    const thinking = body.querySelector('[data-field="thinkingDefault"]').value;
+    if (thinking) agent.thinkingDefault = thinking;
+    else delete agent.thinkingDefault;
+    const reasoning = body.querySelector('[data-field="reasoningDefault"]').value;
+    if (reasoning) agent.reasoningDefault = reasoning;
+    else delete agent.reasoningDefault;
+    const fastMode = body.querySelector('[data-field="fastModeDefault"]').value;
+    if (fastMode !== '') agent.fastModeDefault = fastMode === 'true';
+    else delete agent.fastModeDefault;
+    // Params: clear old params then set from UI
+    const params = {};
+    PARAM_FIELDS.forEach(f => {
+      const val = body.querySelector(`[data-field="param-${f.key}"]`).value.trim();
+      if (val !== '') params[f.key] = parseFloat(val);
+    });
+    if (Object.keys(params).length) agent.params = params;
+    else delete agent.params;
+    agents.push(agent);
+  });
+  fullConfig.agents.list = agents;
+}
+
+// ==================== Defaults ====================
+function renderDefaults() {
+  const d = fullConfig.agents?.defaults || {};
+  document.getElementById('default-primary').value = d.model?.primary || '';
+  document.getElementById('default-fallbacks').value = (d.model?.fallbacks || []).join('\n');
+  document.getElementById('image-primary').value = d.imageModel?.primary || '';
+  document.getElementById('image-fallbacks').value = (d.imageModel?.fallbacks || []).join('\n');
+  document.getElementById('default-thinking').value = d.thinkingDefault || 'low';
+  document.getElementById('default-timeout').value = d.timeoutSeconds || 3600;
+  document.getElementById('default-llm-idle').value = d.llm?.idleTimeoutSeconds || 0;
+}
+
+function collectDefaults() {
+  const d = fullConfig.agents.defaults;
+  d.model.primary = document.getElementById('default-primary').value.trim();
+  d.model.fallbacks = document.getElementById('default-fallbacks').value.split('\n').map(s => s.trim()).filter(Boolean);
+  d.imageModel = d.imageModel || {};
+  d.imageModel.primary = document.getElementById('image-primary').value.trim();
+  d.imageModel.fallbacks = document.getElementById('image-fallbacks').value.split('\n').map(s => s.trim()).filter(Boolean);
+  d.thinkingDefault = document.getElementById('default-thinking').value;
+  d.timeoutSeconds = parseInt(document.getElementById('default-timeout').value) || 3600;
+  d.llm = d.llm || {};
+  d.llm.idleTimeoutSeconds = parseInt(document.getElementById('default-llm-idle').value) || 0;
+  // remove reasoningDefault and fastModeDefault from defaults if they exist
+  delete d.reasoningDefault;
+  delete d.fastModeDefault;
+}
+
+// ==================== Raw JSON ====================
+function collectRaw() {
+  try {
+    fullConfig = JSON.parse(document.getElementById('raw-json').value);
+  } catch (e) {
+    toast('JSON 解析失败: ' + e.message, 'error');
+    throw e;
+  }
+}
+
+function formatJson() {
+  const el = document.getElementById('raw-json');
+  try {
+    el.value = JSON.stringify(JSON.parse(el.value), null, 2);
+  } catch (e) {
+    toast('JSON 格式化失败: ' + e.message, 'error');
+  }
+}
+
+// ==================== Save ====================
+async function saveCurrentPanel() {
+  try {
+    setStatus('loading', '保存中...');
+    switch (currentPanel) {
+      case 'providers': collectProviders(); break;
+      case 'models': collectModelCfgs(); break;
+      case 'agents': collectAgents(); break;
+      case 'defaults': collectDefaults(); break;
+      case 'raw': collectRaw(); break;
+    }
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullConfig),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    setStatus('ok', '已保存');
+    toast('保存成功', 'success');
+  } catch (e) {
+    setStatus('err', '保存失败');
+    toast('保存失败: ' + e.message, 'error');
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Init
+loadConfig();
+</script>
+</body>
+</html>
