@@ -396,13 +396,7 @@
           <input type="number" id="default-timeout" placeholder="3600">
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>LLM Idle Timeout（秒, 0=不限）</label>
-          <input type="number" id="default-llm-idle" placeholder="0">
-        </div>
-        <div class="form-group"></div>
-      </div>
+
     </div>
   </div>
 
@@ -1198,7 +1192,6 @@ function renderDefaults() {
   // General settings
   document.getElementById('default-thinking').value = d.thinkingDefault || 'low';
   document.getElementById('default-timeout').value = d.timeoutSeconds || 3600;
-  document.getElementById('default-llm-idle').value = d.llm?.idleTimeoutSeconds || 0;
 }
 
 function collectDefaults() {
@@ -1210,8 +1203,6 @@ function collectDefaults() {
   d.imageModel.fallbacks = getCheckedValues(document.getElementById('image-fallbacks-list'));
   d.thinkingDefault = document.getElementById('default-thinking').value;
   d.timeoutSeconds = parseInt(document.getElementById('default-timeout').value) || 3600;
-  d.llm = d.llm || {};
-  d.llm.idleTimeoutSeconds = parseInt(document.getElementById('default-llm-idle').value) || 0;
   delete d.reasoningDefault;
   delete d.fastModeDefault;
 }
