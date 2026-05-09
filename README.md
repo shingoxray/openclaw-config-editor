@@ -4,10 +4,11 @@ OpenClaw 配置文件的 Web GUI 编辑器，提供可视化的配置管理界�
 
 ## 功能
 
-- **模型 Provider** — 管理 `config.models` 下的 Provider 定义（API 接入、模型参数）
-- **模型配置** — 管理 `config.agents.defaults.models` 下的 slug → 别名/params 映射
-- **代理配置** — 管理 `config.agents.list` 下每个代理的模型、thinking、reasoning、fastMode、params
+- **模型 Provider** — 管理 `config.models` 下的 Provider 定义（API 接入、模型参数），支持下拉选择
+- **模型配置** — 管理 `config.agents.defaults.models` 下的 slug → 别名/params 映射，params 可折叠
+- **代理配置** — 管理每个代理的模型（下拉选择）、fallback（可排序多选）、thinking、params 等
 - **默认设置** — 管理 `config.agents.defaults` 下的主模型、fallback、图片模型、timeout 等
+- **插件配置** — 管理 `config.plugins.allow` 插件白名单，支持勾选启用，内置 80+ 插件说明
 - **原始 JSON** — 直接编辑完整 JSON，支持格式化
 - **备份** — 一键备份配置文件（`openclaw.json.YYYYMMDDHHMMSS`），自动保存时也会创建备份（最多保留 10 个）
 

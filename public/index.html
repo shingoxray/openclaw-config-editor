@@ -179,6 +179,32 @@
     transition: all .15s;
   }
   .fb-item .fb-order-btns button:hover { color: var(--text); background: var(--bg-hover); border-color: var(--text-muted); }
+  /* Plugin items */
+  .plugin-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 14px; transition: border-color .15s;
+  }
+  .plugin-item:hover { border-color: var(--text-muted); }
+  .plugin-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+  .plugin-item .plugin-name { font-weight: 500; color: var(--text); cursor: pointer; user-select: none; white-space: nowrap; }
+  .plugin-item .plugin-desc { flex: 1; color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .plugin-item .plugin-info {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; color: var(--text-muted); cursor: help; font-size: 13px;
+    font-weight: 700; border: 1px solid var(--border); border-radius: 50%;
+    flex-shrink: 0; transition: all .15s;
+  }
+  .plugin-item .plugin-info:hover { color: var(--accent-light); border-color: var(--accent); }
+  .plugin-item .plugin-tooltip {
+    display: none; position: fixed; z-index: 60;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; font-size: 12px; color: var(--text-dim);
+    white-space: normal; width: 280px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    font-weight: 400; line-height: 1.5; pointer-events: none;
+  }
+  .plugin-item .plugin-tooltip.open { display: block; }
   /* Provider cards */
   .provider-card {
     border: 1px solid var(--border); border-radius: var(--radius);
@@ -295,6 +321,7 @@
   <div class="tab" data-panel="models" onclick="switchTab(this)">模型配置</div>
   <div class="tab" data-panel="agents" onclick="switchTab(this)">代理配置</div>
   <div class="tab" data-panel="defaults" onclick="switchTab(this)">默认设置</div>
+  <div class="tab" data-panel="plugins" onclick="switchTab(this)">插件配置</div>
   <div class="tab" data-panel="raw" onclick="switchTab(this)">原始 JSON</div>
 </div>
 
@@ -400,6 +427,18 @@
     </div>
   </div>
 
+  <!-- Plugins Panel: config.plugins -->
+  <div class="panel" id="panel-plugins">
+    <div class="desc">编辑 <code>config.plugins.allow</code> — 允许加载的插件白名单</div>
+    <div class="card">
+      <div class="card-title">
+        插件列表
+        <span class="badge" id="plugin-allow-count">0</span>
+      </div>
+      <div id="plugin-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </div>
+
   <!-- Raw JSON Panel -->
   <div class="panel" id="panel-raw">
     <div class="card">
@@ -469,6 +508,7 @@ async function loadConfig() {
     renderModelCfgs();
     renderAgents();
     renderDefaults();
+    renderPlugins();
     document.getElementById('loading').style.display = 'none';
     setStatus('ok', '已加载');
     toast('配置加载成功', 'success');
@@ -482,7 +522,7 @@ async function loadConfig() {
 function reloadConfig() {
   document.getElementById('loading').style.display = 'flex';
   document.getElementById('loading').innerHTML = '<div class="spinner"></div><div>正在加载配置...</div>';
-  loadConfig();
+  return loadConfig();
 }
 
 // --- Backup ---
@@ -1207,7 +1247,214 @@ function collectDefaults() {
   delete d.fastModeDefault;
 }
 
-// ==================== Raw JSON ====================
+// ==================== Plugins ====================
+const PLUGIN_REGISTRY = {
+  'acpx': { desc: 'ACP Runtime — 子代理协作运行时，支持会话生成与流式输出' },
+  'active-memory': { desc: 'Active Memory — 主动记忆管理，为代理提供上下文感知的长期记忆' },
+  'alibaba': { desc: 'Alibaba (通义千问) — 阿里云通义千问模型 Provider' },
+  'amazon-bedrock': { desc: 'Amazon Bedrock — AWS Bedrock 托管模型服务 Provider' },
+  'amazon-bedrock-mantle': { desc: 'Amazon Bedrock Mantle — Bedrock 高级封装层，提供额外功能支持' },
+  'anthropic': { desc: 'Anthropic — Claude 系列模型 Provider (Claude 4, Sonnet, Haiku 等)' },
+  'anthropic-vertex': { desc: 'Anthropic Vertex — 通过 Google Vertex AI 访问 Claude 模型' },
+  'arcee': { desc: 'Arcee — Arcee 模型 Provider' },
+  'azure-speech': { desc: 'Azure Speech — 微软 Azure 语音合成与识别服务' },
+  'bonjour': { desc: 'Bonjour (mDNS) — 局域网服务发现，允许附近设备自动发现 Gateway' },
+  'brave': { desc: 'Brave Search — Brave 搜索引擎集成，提供网页搜索能力' },
+  'browser': { desc: 'Browser — 浏览器自动化工具，支持页面操作、截图、表单填写等' },
+  'byteplus': { desc: 'BytePlus — 字节跳动火山引擎模型 Provider' },
+  'canvas': { desc: 'Canvas — 可视化画布，支持 A2UI 与实时 HTML/CSS/JS 渲染' },
+  'cerebras': { desc: 'Cerebras — Cerebras 推理加速平台 Provider' },
+  'chutes': { desc: 'Chutes — Chutes 模型市场与推理服务 Provider' },
+  'cloudflare-ai-gateway': { desc: 'Cloudflare AI Gateway — 通过 Cloudflare AI Gateway 代理模型请求' },
+  'codex': { desc: 'Codex — OpenAI Codex 原生应用服务器 Harness，支持 Codex 插件生态' },
+  'comfy': { desc: 'ComfyUI — ComfyUI 图像生成工作流集成' },
+  'copilot-proxy': { desc: 'Copilot Proxy — GitHub Copilot 代理服务 Provider' },
+  'deepgram': { desc: 'Deepgram — Deepgram 语音识别与转录服务' },
+  'deepinfra': { desc: 'DeepInfra — DeepInfra 模型推理服务 Provider' },
+  'deepseek': { desc: 'DeepSeek — DeepSeek 模型 Provider (DeepSeek V3, R1 等)' },
+  'device-pair': { desc: 'Device Pair — 设备配对管理，处理 iOS/Android 节点与 Gateway 的配对流程' },
+  'diagnostics-otel': { desc: 'Diagnostics OTel — OpenTelemetry 遥测数据导出' },
+  'diagnostics-prometheus': { desc: 'Diagnostics Prometheus — Prometheus 指标导出' },
+  'diffs': { desc: 'Diffs — 文件差异对比与补丁应用工具' },
+  'discord': { desc: 'Discord — Discord 消息通道，支持 DM、服务器、频道消息收发' },
+  'document-extract': { desc: 'Document Extract — 文档内容提取，支持 PDF、Word 等格式' },
+  'duckduckgo': { desc: 'DuckDuckGo — DuckDuckGo 搜索引擎集成' },
+  'elevenlabs': { desc: 'ElevenLabs — ElevenLabs 语音合成 (TTS) 服务' },
+  'exa': { desc: 'Exa — Exa AI 搜索引擎集成' },
+  'fal': { desc: 'Fal — Fal.ai 图像/视频生成服务' },
+  'feishu': { desc: 'Feishu (飞书) — 飞书消息通道，支持机器人消息收发' },
+  'file-transfer': { desc: 'File Transfer — 文件传输工具，支持设备间文件共享' },
+  'firecrawl': { desc: 'Firecrawl — Firecrawl 网页抓取与搜索服务，增强 web-fetch 和 web-search' },
+  'fireworks': { desc: 'Fireworks — Fireworks AI 模型推理服务 Provider' },
+  'github-copilot': { desc: 'GitHub Copilot — GitHub Copilot 模型 Provider' },
+  'google': { desc: 'Google — Google Gemini 系列模型 Provider' },
+  'google-meet': { desc: 'Google Meet — Google Meet 视频会议集成，支持自动参会与实时交互' },
+  'googlechat': { desc: 'Google Chat — Google Chat 消息通道' },
+  'gradium': { desc: 'Gradium — Gradium 模型 Provider' },
+  'groq': { desc: 'Groq — Groq 超高速推理平台 Provider' },
+  'huggingface': { desc: 'Hugging Face — Hugging Face 模型推理服务 Provider' },
+  'image-generation-core': { desc: 'Image Generation Core — 图像生成核心能力，为其他图像插件提供基础支持' },
+  'imessage': { desc: 'iMessage — Apple iMessage 消息通道 (需要 macOS)' },
+  'inworld': { desc: 'Inworld — Inworld AI 角色与对话引擎' },
+  'irc': { desc: 'IRC — IRC 聊天协议通道' },
+  'kilocode': { desc: 'Kilocode — Kilocode 编码助手 Provider' },
+  'kimi-coding': { desc: 'Kimi Coding — 月之暗面 Kimi 编码模型 Provider' },
+  'line': { desc: 'LINE — LINE 即时通讯消息通道' },
+  'litellm': { desc: 'LiteLLM — LiteLLM 代理服务 Provider，统一多模型 API 接口' },
+  'llm-task': { desc: 'LLM Task — 后台 LLM 任务执行器，用于异步推理与处理' },
+  'lmstudio': { desc: 'LM Studio — LM Studio 本地模型运行时 Provider' },
+  'lobster': { desc: 'Lobster — 内部工具与调试辅助插件' },
+  'matrix': { desc: 'Matrix — Matrix 去中心化通讯协议通道' },
+  'mattermost': { desc: 'Mattermost — Mattermost 开源团队协作消息通道' },
+  'media-understanding-core': { desc: 'Media Understanding Core — 媒体理解核心能力，为图像/音频理解提供基础支持' },
+  'memory-core': { desc: 'Memory Core — 核心记忆系统，支持记忆搜索、梦境 (Dreaming) 与上下文检索' },
+  'memory-lancedb': { desc: 'Memory LanceDB — 基于 LanceDB 的向量记忆后端' },
+  'memory-wiki': { desc: 'Memory Wiki — Wiki 风格的结构化知识记忆存储' },
+  'microsoft': { desc: 'Microsoft — 微软 Azure OpenAI 模型 Provider' },
+  'microsoft-foundry': { desc: 'Microsoft Foundry — Azure AI Foundry 模型服务 Provider' },
+  'migrate-claude': { desc: 'Migrate Claude — 从 Claude 配置迁移工具' },
+  'migrate-hermes': { desc: 'Migrate Hermes — 从 Hermes 配置迁移工具' },
+  'minimax': { desc: 'MiniMax — MiniMax 模型 Provider' },
+  'mistral': { desc: 'Mistral — Mistral AI 模型 Provider (Mistral Large, Medium, Small 等)' },
+  'moonshot': { desc: 'Moonshot — 月之暗面 Moonshot (Kimi) 模型 Provider' },
+  'msteams': { desc: 'Microsoft Teams — 微软 Teams 协作平台消息通道' },
+  'nextcloud-talk': { desc: 'Nextcloud Talk — Nextcloud Talk 视频会议与消息通道' },
+  'nostr': { desc: 'Nostr — Nostr 去中心化社交协议通道' },
+  'nvidia': { desc: 'NVIDIA — NVIDIA NIM 推理服务 Provider' },
+  'ollama': { desc: 'Ollama — Ollama 本地模型运行时 Provider' },
+  'open-prose': { desc: 'Open Prose — 文本生成与写作辅助插件' },
+  'openai': { desc: 'OpenAI — OpenAI 模型 Provider (GPT-4o, o3, o4-mini 等)' },
+  'opencode': { desc: 'OpenCode — OpenCode 编码工具集成' },
+  'opencode-go': { desc: 'OpenCode Go — OpenCode Go 版本编码工具集成' },
+  'openclaw-weixin': { desc: 'OpenClaw WeChat (微信) — 微信消息通道，支持微信公众号/个人号消息收发' },
+  'openrouter': { desc: 'OpenRouter — OpenRouter 多模型路由服务 Provider' },
+  'openshell': { desc: 'OpenShell — 沙箱命令执行后端，支持 SSH 和 Docker' },
+  'perplexity': { desc: 'Perplexity — Perplexity AI 搜索引擎 Provider' },
+  'phone-control': { desc: 'Phone Control — 电话控制插件，支持语音通话管理' },
+  'qa-channel': { desc: 'QA Channel — 通道质量保证测试工具' },
+  'qa-lab': { desc: 'QA Lab — QA 测试实验室工具' },
+  'qa-matrix': { desc: 'QA Matrix — Matrix 通道测试工具' },
+  'qianfan': { desc: 'Qianfan (千帆) — 百度千帆大模型平台 Provider' },
+  'qqbot': { desc: 'QQ Bot — QQ 机器人消息通道' },
+  'qwen': { desc: 'Qwen (通义千问) — 阿里云通义千问独立模型 Provider' },
+  'runway': { desc: 'Runway — Runway 视频生成服务' },
+  'searxng': { desc: 'SearXNG — SearXNG 自托管元搜索引擎集成' },
+  'senseaudio': { desc: 'SenseAudio — 音频感知与分析插件' },
+  'sglang': { desc: 'SGLang — SGLang 推理服务 Provider' },
+  'signal': { desc: 'Signal — Signal 加密通讯消息通道' },
+  'skill-workshop': { desc: 'Skill Workshop — 技能开发工作台，辅助创建与管理代理技能' },
+  'slack': { desc: 'Slack — Slack 团队协作消息通道' },
+  'speech-core': { desc: 'Speech Core — 语音核心能力，提供语音唤醒与对话模式支持' },
+  'stepfun': { desc: 'StepFun (阶跃星辰) — 阶跃星辰模型 Provider' },
+  'synology-chat': { desc: 'Synology Chat — 群晖 Chat 消息通道' },
+  'synthetic': { desc: 'Synthetic — 合成数据生成与测试工具' },
+  'talk-voice': { desc: 'Talk Voice — 语音对话模式，支持持续语音交互' },
+  'tts-local-cli': { desc: 'TTS Local CLI — 本地命令行语音合成 (TTS)，通过系统或第三方 CLI 工具生成语音' },
+  'tavily': { desc: 'Tavily — Tavily AI 搜索引擎集成' },
+  'web-readability': { desc: 'Web Readability — 网页可读性提取，将网页内容转为干净可读的文本格式' },
+  'webhooks': { desc: 'Webhooks — Webhook 集成，支持通过 HTTP Webhook 触发代理行为和事件通知' },
+};
+
+function renderPlugins() {
+  const list = document.getElementById('plugin-list');
+  list.innerHTML = '';
+  const plugins = fullConfig.plugins || {};
+  const allowList = plugins.allow || [];
+
+  // Collect all plugin names: registry + any in allow not in registry
+  const allNames = new Set([...Object.keys(PLUGIN_REGISTRY), ...allowList]);
+  const sorted = [...allNames].sort((a, b) => a.localeCompare(b));
+
+  sorted.forEach(name => {
+    const item = document.createElement('div');
+    item.className = 'plugin-item';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = allowList.includes(name);
+    cb.dataset.plugin = name;
+    cb.id = 'plugin-cb-' + name;
+    cb.addEventListener('change', updatePluginCount);
+
+    const lbl = document.createElement('label');
+    lbl.className = 'plugin-name';
+    lbl.htmlFor = cb.id;
+    lbl.textContent = name;
+
+    item.appendChild(cb);
+    item.appendChild(lbl);
+
+    const info = PLUGIN_REGISTRY[name];
+    if (info) {
+      const infoIcon = document.createElement('span');
+      infoIcon.className = 'plugin-info';
+      infoIcon.textContent = 'i';
+
+      const tooltip = document.createElement('div');
+      tooltip.className = 'plugin-tooltip';
+      tooltip.textContent = info.desc;
+
+      infoIcon.addEventListener('mouseenter', () => {
+        tooltip.classList.add('open');
+        const r = infoIcon.getBoundingClientRect();
+        const tw = 280;
+        let left = r.left + r.width + 6;
+        if (left + tw > window.innerWidth - 8) left = r.left - tw - 6;
+        if (left < 8) left = 8;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = '';
+        tooltip.style.bottom = '';
+        tooltip.style.top = r.top + 'px';
+        // Defer height check so tooltip is rendered
+        requestAnimationFrame(() => {
+          const tr = tooltip.getBoundingClientRect();
+          if (tr.bottom > window.innerHeight - 8) {
+            tooltip.style.top = '';
+            tooltip.style.bottom = (window.innerHeight - r.bottom) + 'px';
+          }
+          if (tr.top < 8) {
+            tooltip.style.top = '8px';
+            tooltip.style.bottom = '';
+          }
+        });
+      });
+
+      infoIcon.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('open');
+      });
+
+      item.appendChild(infoIcon);
+
+      const descSpan = document.createElement('span');
+      descSpan.className = 'plugin-desc';
+      descSpan.textContent = info.desc;
+      item.appendChild(descSpan);
+
+      item.appendChild(tooltip);
+    }
+
+    list.appendChild(item);
+  });
+
+  updatePluginCount();
+}
+
+function updatePluginCount() {
+  const total = document.querySelectorAll('#plugin-list input[type="checkbox"]').length;
+  const checked = document.querySelectorAll('#plugin-list input[type="checkbox"]:checked').length;
+  document.getElementById('plugin-allow-count').textContent = checked + ' / ' + total;
+}
+
+function collectPlugins() {
+  const checks = document.querySelectorAll('#plugin-list input[type="checkbox"]');
+  const allow = [];
+  checks.forEach(cb => {
+    if (cb.checked) allow.push(cb.dataset.plugin);
+  });
+  if (!fullConfig.plugins) fullConfig.plugins = {};
+  fullConfig.plugins.allow = allow;
+}
+
 function collectRaw() {
   try {
     fullConfig = JSON.parse(document.getElementById('raw-json').value);
@@ -1235,6 +1482,7 @@ async function saveCurrentPanel() {
       case 'models': collectModelCfgs(); break;
       case 'agents': collectAgents(); break;
       case 'defaults': collectDefaults(); break;
+      case 'plugins': collectPlugins(); break;
       case 'raw': collectRaw(); break;
     }
     const res = await fetch('/api/config', {
@@ -1246,6 +1494,7 @@ async function saveCurrentPanel() {
     if (!json.ok) throw new Error(json.error);
     setStatus('ok', '已保存');
     toast('保存成功', 'success');
+    await reloadConfig();
   } catch (e) {
     setStatus('err', '保存失败');
     toast('保存失败: ' + e.message, 'error');
