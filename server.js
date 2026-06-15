@@ -2,7 +2,6 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -14,6 +13,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // 备份配置
 function backupConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) return null;
   const backupDir = path.join(process.env.HOME, '.openclaw');
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const backupPath = path.join(backupDir, `openclaw.json.editor-bak-${ts}`);
@@ -44,6 +44,9 @@ function writeConfig(config) {
 // API: 获取完整配置
 app.get('/api/config', (req, res) => {
   try {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      return res.status(404).json({ ok: false, error: '配置文件不存在', notFound: true });
+    }
     const config = readConfig();
     res.json({ ok: true, data: config });
   } catch (e) {

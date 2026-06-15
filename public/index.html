@@ -128,6 +128,12 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.5); display: none;
   }
   .slug-dropdown.open { display: block; }
+  .slug-search {
+    width: 100%; padding: 6px 10px; background: var(--bg-input);
+    border: none; border-bottom: 1px solid var(--border);
+    color: var(--text); font-size: 12px; outline: none;
+    position: sticky; top: 0; z-index: 1;
+  }
   .slug-dropdown .slug-opt {
     padding: 6px 10px; font-size: 13px; cursor: pointer; color: var(--text);
     border-bottom: 1px solid var(--border); transition: background .1s;
@@ -502,7 +508,18 @@ async function loadConfig() {
     document.getElementById('loading').style.display = 'flex';
     const res = await fetch('/api/config');
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error);
+    if (!json.ok) {
+      if (json.notFound) {
+        document.getElementById('loading').innerHTML = `
+          <div style="color:var(--text-dim);margin-bottom:16px">配置文件不存在</div>
+          <button class="btn btn-primary" onclick="createDefaultConfig()">创建默认配置</button>
+          <button class="btn btn-ghost" style="margin-left:8px" onclick="reloadConfig()">重试</button>
+        `;
+        setStatus('err', '配置文件不存在');
+        return;
+      }
+      throw new Error(json.error);
+    }
     fullConfig = json.data;
     renderProviders();
     renderModelCfgs();
@@ -523,6 +540,29 @@ function reloadConfig() {
   document.getElementById('loading').style.display = 'flex';
   document.getElementById('loading').innerHTML = '<div class="spinner"></div><div>正在加载配置...</div>';
   return loadConfig();
+}
+
+async function createDefaultConfig() {
+  const defaultConfig = {
+    models: { mode: 'merge', providers: {} },
+    agents: { defaults: { models: {}, model: { primary: '', fallbacks: [] }, thinkingDefault: 'low', timeoutSeconds: 3600 }, list: [] },
+    plugins: { allow: [] }
+  };
+  try {
+    setStatus('loading', '创建中...');
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(defaultConfig),
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    toast('默认配置已创建', 'success');
+    await reloadConfig();
+  } catch (e) {
+    setStatus('err', '创建失败');
+    toast('创建失败: ' + e.message, 'error');
+  }
 }
 
 // --- Backup ---
@@ -560,6 +600,7 @@ function apiOptions(selected) {
 function createProviderCard(name, prov) {
   const card = document.createElement('div');
   card.className = 'provider-card';
+  card.dataset.origName = name;
   const modelCount = prov.models?.length || 0;
   card.innerHTML = `
     <div class="provider-header" onclick="this.nextElementSibling.classList.toggle('open')">
@@ -568,7 +609,7 @@ function createProviderCard(name, prov) {
         <span class="provider-meta" style="margin-left:12px">${modelCount} models · ${esc(prov.api || 'openai-completions')}</span>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();this.closest('.provider-card').remove()">删除</button>
+        <button class="btn btn-danger btn-sm" data-action="remove-provider">删除</button>
         <span style="color:var(--text-muted);font-size:18px">▾</span>
       </div>
     </div>
@@ -611,6 +652,11 @@ function createProviderCard(name, prov) {
       <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addProviderModel(this)">+ 添加模型</button>
     </div>
   `;
+  card.querySelector('[data-action="remove-provider"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!confirm('确定删除此 Provider？')) return;
+    card.remove();
+  });
   return card;
 }
 
@@ -705,11 +751,14 @@ function addProviderModel(btn) {
 
 function collectProviders() {
   const mode = document.getElementById('providers-mode').value;
+  const origProviders = fullConfig.models?.providers || {};
   const providers = {};
   document.querySelectorAll('#provider-list .provider-card').forEach(card => {
     const body = card.querySelector('.provider-body');
     const name = body.querySelector('[data-field="provider-name"]').value.trim();
     if (!name) return;
+    const origName = card.dataset.origName || name;
+    const orig = JSON.parse(JSON.stringify(origProviders[origName] || {}));
     const models = [];
     body.querySelectorAll('.provider-model-row').forEach(row => {
       const id = row.querySelector('[data-field="id"]').value.trim();
@@ -727,10 +776,13 @@ function collectProviders() {
         maxTokens: parseInt(row.querySelector('[data-field="maxTokens"]').value) || 8192,
       };
       try { const compat = JSON.parse(row.dataset.origCompat || '{}'); if (Object.keys(compat).length) m.compat = compat; } catch(e) {}
-      try { const cost = JSON.parse(row.dataset.origCost || '{}'); m.cost = Object.keys(cost).length ? cost : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }; } catch(e) { m.cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }; }
+      if (row.dataset.origCost) {
+        try { m.cost = JSON.parse(row.dataset.origCost); } catch(e) {}
+      }
       models.push(m);
     });
     providers[name] = {
+      ...orig,
       api: body.querySelector('[data-field="api"]').value,
       apiKey: body.querySelector('[data-field="apiKey"]').value.trim(),
       auth: body.querySelector('[data-field="auth"]').value,
@@ -777,6 +829,7 @@ function createParamsHTML(params) {
 function createModelCfgRow(slug, cfg) {
   const div = document.createElement('div');
   div.className = 'modelcfg-item';
+  div.dataset.originalSlug = slug;
   const slugs = getAvailableModelSlugs();
   const dropdownOpts = slugs.map(s => {
     const opt = document.createElement('div');
@@ -820,6 +873,17 @@ function createModelCfgRow(slug, cfg) {
   
   const dd = document.createElement('div');
   dd.className = 'slug-dropdown';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = '搜索模型...';
+  searchInput.className = 'slug-search';
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.toLowerCase();
+    dd.querySelectorAll('.slug-opt').forEach(opt => {
+      opt.style.display = opt.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+  dd.appendChild(searchInput);
   dropdownOpts.forEach(opt => dd.appendChild(opt));
   
   wrap.appendChild(slugInput);
@@ -853,7 +917,11 @@ function createModelCfgRow(slug, cfg) {
   removeBtn.className = 'remove-btn';
   removeBtn.title = '删除';
   removeBtn.textContent = '✕';
-  removeBtn.addEventListener('click', () => div.remove());
+  removeBtn.addEventListener('click', () => {
+    if (!confirm('确定删除此模型配置？')) return;
+    div.remove();
+    document.getElementById('model-count').textContent = document.querySelectorAll('#modelcfg-list .modelcfg-item').length;
+  });
   mainDiv.appendChild(removeBtn);
 
   div.appendChild(mainDiv);
@@ -879,8 +947,8 @@ function collectModelCfgs() {
   rows.forEach(row => {
     const slug = row.querySelector('[data-field="slug"]').value.trim();
     if (!slug) return;
-    // Start from a copy of the original entry to preserve fields like streaming
-    const orig = origModels[slug] || {};
+    const origSlug = row.dataset.originalSlug || slug;
+    const orig = origModels[origSlug] || {};
     const entry = JSON.parse(JSON.stringify(orig));
     entry.alias = row.querySelector('[data-field="alias"]').value.trim();
     const params = {};
@@ -998,7 +1066,7 @@ function createAgentCard(agent, idx) {
   fmGroup.innerHTML = '<label>Fast Mode Default</label>';
   const fmSel = document.createElement('select');
   fmSel.dataset.field = 'fastModeDefault';
-  fmSel.innerHTML = `<option value="">（继承默认）</option><option value="true" ${agent.fastModeDefault === true ? 'selected' : ''}>true</option><option value="false" ${agent.fastModeDefault === false ? 'selected' : ''}>false</option>`;
+  fmSel.innerHTML = `<option value="">（继承默认）</option><option value="true" ${String(agent.fastModeDefault) === 'true' ? 'selected' : ''}>true</option><option value="false" ${String(agent.fastModeDefault) === 'false' ? 'selected' : ''}>false</option>`;
   fmGroup.appendChild(fmSel);
   body.appendChild(fmGroup);
 
@@ -1038,6 +1106,7 @@ function addAgent() {
 }
 
 function removeAgent(idx) {
+  if (!confirm('确定删除此代理？')) return;
   fullConfig.agents.list.splice(idx, 1);
   renderAgents();
 }
@@ -1124,6 +1193,17 @@ function createDropdownSelect(options, selected, placeholder) {
   btn.title = '选择';
   const dd = document.createElement('div');
   dd.className = 'slug-dropdown';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = '搜索...';
+  searchInput.className = 'slug-search';
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.toLowerCase();
+    dd.querySelectorAll('.slug-opt').forEach(opt => {
+      opt.style.display = opt.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+  dd.appendChild(searchInput);
   options.forEach(opt => {
     const item = document.createElement('div');
     item.className = 'slug-opt';
@@ -1243,8 +1323,6 @@ function collectDefaults() {
   d.imageModel.fallbacks = getCheckedValues(document.getElementById('image-fallbacks-list'));
   d.thinkingDefault = document.getElementById('default-thinking').value;
   d.timeoutSeconds = parseInt(document.getElementById('default-timeout').value) || 3600;
-  delete d.reasoningDefault;
-  delete d.fastModeDefault;
 }
 
 // ==================== Plugins ====================
@@ -1358,6 +1436,26 @@ const PLUGIN_REGISTRY = {
 function renderPlugins() {
   const list = document.getElementById('plugin-list');
   list.innerHTML = '';
+  // Add search filter
+  const existingSearch = list.parentElement.querySelector('.plugin-search-wrap');
+  if (existingSearch) existingSearch.remove();
+  const searchWrap = document.createElement('div');
+  searchWrap.className = 'plugin-search-wrap';
+  searchWrap.style.cssText = 'margin-bottom:12px';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = '搜索插件...';
+  searchInput.style.cssText = 'width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;';
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.toLowerCase();
+    list.querySelectorAll('.plugin-item').forEach(item => {
+      const name = item.querySelector('.plugin-name').textContent;
+      const desc = item.querySelector('.plugin-desc')?.textContent || '';
+      item.style.display = (name.toLowerCase().includes(q) || desc.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+  searchWrap.appendChild(searchInput);
+  list.parentElement.insertBefore(searchWrap, list);
   const plugins = fullConfig.plugins || {};
   const allowList = plugins.allow || [];
 
